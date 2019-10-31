@@ -1,0 +1,107 @@
+---
+title: "X06 Scraping Schedules"
+author: "Kris Walker"
+date: "10/30/2019"
+output: html_document
+---
+
+First we load the required packages or install them if they're not already present.
+```{r message=FALSE}
+pkgs <- c("rvest", "dplyr", "magrittr", "httr", "stringr")
+for (pkg in pkgs){
+  if (!require(pkg, character.only = TRUE)){
+    install.packages(pkg)
+    library(pkg)
+  }
+}
+```
+
+Obtain the URL's of the webpages we are interested in and store them into their own variables.
+```{r}
+csci_spring_2019_url <- "http://ems.csuchico.edu/APSS/schedule/spr2019/CSCI.shtml"
+csci_spring_2020_url <- "http://ems.csuchico.edu/APSS/schedule/spr2020/CSCI.shtml"
+math_spring_2019_url <- "http://ems.csuchico.edu/APSS/schedule/spr2019/MATH.shtml"
+math_spring_2020_url <- "http://ems.csuchico.edu/APSS/schedule/spr2020/MATH.shtml"
+```
+
+The function `read_class_schedule()` takes the url passed as an argument, read in the HTML, selects the necessary
+nodes, extracts the necessary elements and text and returns a tibble with the data.
+```{r}
+read_class_schedule <- function(url){
+  webpage <- read_html(url)                      #Use rvest to read in the html file.
+  #Select the nodes that we want from the HTML.
+  selector <- '//*[contains(concat( " ", @class, " " ), concat( " ", "subj", " " ))] | //*[contains(concat( " ", @class, " " ), concat( " ", "cat_num", " " ))] |
+     //*[contains(concat( " ", @class, " " ), concat( " ", "sect", " " ))] | //*[contains(concat( " ", @class, " " ), concat( " ", "title", " " ))] |
+     //*[contains(concat( " ", @class, " " ), concat( " ", "instructor", " " ))] | //*[contains(concat( " ", @class, " " ), concat( " ", "tot_enrl", " " ))]'
+  my_nodes <- webpage %>% html_nodes(xpath = selector)
+  
+  #Extract the subject column elements and subject text from the webpage.
+  subj_elements <- my_nodes %>% 
+    html_nodes(xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "subj", " " ))]')
+  subj_text <- html_text(subj_elements)[-1]
+  
+  #Extract the cat number column elements and cat number text from the webpage.
+  cat_num_elements <- my_nodes %>% 
+    html_nodes(xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "cat_num", " " ))]')
+  cat_num_text <- html_text(cat_num_elements)[-1]
+  
+  #Extract the section number column and section number text from the webpage.
+  sect_elements <- my_nodes %>% 
+    html_nodes(xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "sect", " " ))]')
+  sect_text <- html_text(sect_elements)[-1]
+  
+  #Extract the class title  column and class title text from the webpage.
+  title_elements <- my_nodes %>% 
+    html_nodes(xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "title", " " ))]')
+  title_text <- html_text(title_elements)[-1]
+  
+  #Extract the instructor column and instructor text from the webpage.
+  instr_elements <- my_nodes %>% 
+    html_nodes(xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "Instructor", " " ))]')
+  instr_text <- html_text(instr_elements)
+  
+  #Extract the total enrolled column and total enrolled text from the webpage.
+  total_enrl_elements <- my_nodes %>% 
+    html_nodes(xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "enrtot", " " ))]')
+  total_enrl_text <- html_text(total_enrl_elements)
+  
+  #Form the returned tibble using the vectors we've extracted.
+  schedule_data <- tibble(
+    subject = subj_text,
+    cat_number = cat_num_text,
+    section = sect_text,
+    title = title_text,
+    instructor = instr_text,
+    total_enrolled = total_enrl_text
+  )
+}
+```
+
+Assign tibbles for each of the four webpages, by calling the read_class_schedule() function which extracts the 
+necessary data and creates the tibbles.
+```{r}
+csci_spring_2019_data <- read_class_schedule(csci_spring_2019_url)
+csci_spring_2020_data <- read_class_schedule(csci_spring_2020_url)
+math_spring_2019_data <- read_class_schedule(math_spring_2019_url)
+math_spring_2020_data <- read_class_schedule(math_spring_2020_url)
+```
+
+Add term and year columns to the dataframes to keep track of what class was offered when among other reasons.
+```{r}
+csci_spring_2019_data <- tibble::add_column(csci_spring_2019_data, term = "spring", year = "2019", .before = "subject")
+csci_spring_2020_data <- tibble::add_column(csci_spring_2020_data, term = "spring", year = "2020", .before = "subject")
+math_spring_2019_data <- tibble::add_column(math_spring_2019_data, term = "spring", year = "2019", .before = "subject")
+math_spring_2020_data <- tibble::add_column(math_spring_2020_data, term = "spring", year = "2020", .before = "subject")
+```
+
+Combine them all into one dataframe.
+```{r}
+all_schedule_data <- bind_rows(csci_spring_2019_data, math_spring_2019_data, csci_spring_2020_data, math_spring_2020_data)
+```
+
+Let's take a look at the results.
+```{r}
+head(all_schedule_data, 10)
+tail(all_schedule_data, 10)
+```
+
